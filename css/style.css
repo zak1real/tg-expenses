@@ -225,6 +225,51 @@ body.has-bottom-bar .app { padding-bottom: 96px; }
 }
 .main-btn { display: block; width: 100%; max-width: 528px; margin: 0 auto; }
 
+/* Вступление (под нижней кнопкой браузера, над шапкой) */
+.intro {
+  position: fixed; inset: 0; z-index: 15;
+  display: flex; flex-direction: column;
+  padding: 12px 24px calc(24px + env(safe-area-inset-bottom));
+  background: var(--bg); overflow-y: auto;
+}
+body.has-bottom-bar .intro { padding-bottom: 96px; }
+.intro__skip { align-self: flex-end; padding: 8px 4px; color: var(--hint); font-size: 15px; }
+.intro__body { flex: 1; display: flex; align-items: center; justify-content: center; }
+.intro__slide {
+  width: 100%; max-width: 380px; text-align: center;
+  animation: slide-in .3s ease-out;
+}
+.intro__slide.is-back { animation-name: slide-back; }
+@keyframes slide-in { from { opacity: 0; transform: translateX(32px); } }
+@keyframes slide-back { from { opacity: 0; transform: translateX(-32px); } }
+.intro__icon {
+  width: 112px; height: 112px; margin: 0 auto 24px; border-radius: 34px;
+  display: grid; place-items: center; font-size: 56px;
+  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 65%, #ffd166));
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.intro__title { font-size: 26px; font-weight: 800; margin-bottom: 10px; }
+.intro__text { font-size: 16px; line-height: 1.5; color: var(--hint); }
+.intro__dots { display: flex; justify-content: center; gap: 8px; padding: 20px 0 8px; }
+.intro__dots i {
+  width: 8px; height: 8px; border-radius: 4px; background: var(--surface); cursor: pointer;
+  transition: width .25s, background .25s;
+}
+.intro__dots i.is-active { width: 24px; background: var(--accent); }
+
+.intro-demo {
+  margin-top: 24px; padding: 4px 14px; border-radius: var(--radius);
+  background: var(--surface); text-align: left; pointer-events: none;
+}
+.intro-demo .op { border-bottom-color: var(--bg); }
+.intro-demo .op:last-child { border-bottom: 0; }
+.intro-demo--pad { padding: 14px; }
+.intro-demo--pad .bar { margin-top: 0; }
+.intro-demo--chart { display: flex; align-items: center; gap: 14px; }
+.intro-demo--chart .donut { width: 96px; height: 96px; }
+.intro-demo--chart .legend__row { grid-template-columns: 8px minmax(0, 1fr) auto; }
+
 /* Шторка снизу */
 .sheet { position: fixed; inset: 0; z-index: 50; }
 .sheet__backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); opacity: 0; transition: opacity .25s; }

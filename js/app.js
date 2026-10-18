@@ -23,6 +23,9 @@
   function monthKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1); }
   function parseDate(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); }
 
+  // ?demo — сразу пример данных без вступления (для скриншотов и показа клиентам)
+  const demoLink = new URLSearchParams(location.search).has('demo');
+
   const state = {
     ops: store.peek('ops') || [], // { id, type: 'expense' | 'income', amount, cat, date: 'YYYY-MM-DD', note, ts }
     settings: store.peek('settings') || { budget: app.budget },
@@ -30,6 +33,7 @@
     filter: 'all',
     cat: null, // фильтр по категории из диаграммы
     sheet: null, // { kind: 'op', draft } | { kind: 'settings' }
+    intro: null, // номер экрана вступления, null — вступление закрыто
   };
 
   const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -132,8 +136,11 @@
 
   function updateChrome() {
     if (tgCan('6.1')) {
-      if (state.sheet) tg.BackButton.show();
+      if (state.sheet || state.intro > 0) tg.BackButton.show();
       else tg.BackButton.hide();
+    }
+    if (state.intro !== null) {
+      return setMainButton(state.intro === INTRO.length - 1 ? 'Начать' : 'Далее', () => showIntro(state.intro + 1));
     }
     setMainButton(state.sheet ? null : 'Добавить операцию', () => openOp(null));
   }
@@ -144,7 +151,85 @@
     tg.expand();
     tg.MainButton.setParams({ color: app.accent, text_color: '#ffffff' });
     tg.MainButton.onClick(() => mainAction && mainAction());
-    if (tgCan('6.1')) tg.BackButton.onClick(closeSheet);
+    if (tgCan('6.1')) tg.BackButton.onClick(goBack);
+  }
+
+  function goBack() {
+    if (state.sheet) return closeSheet();
+    if (state.intro > 0) showIntro(state.intro - 1);
+  }
+
+  // ---------- Вступление для нового пользователя ----------
+
+  const sampleCat = (id) => categoriesById[id] || categoriesById.other;
+  const sampleOp = (cat, title, amount, income) => `<div class="op">
+      <span class="op__icon" style="--c:${sampleCat(cat).color}">${sampleCat(cat).emoji}</span>
+      <span class="op__info"><span class="op__title">${title}</span><span class="op__meta">${esc(sampleCat(cat).title)}</span></span>
+      <span class="op__amount${income ? ' is-plus' : ''}">${income ? '+' : '−'}${money(amount)}</span>
+    </div>`;
+  const sampleParts = [['food', 6990], ['home', 6130], ['cafe', 5380], ['transport', 1950]]
+    .map(([id, sum]) => ({ ...sampleCat(id), sum }));
+
+  const INTRO = [
+    {
+      icon: app.logo,
+      title: `Привет! Это ${app.name}`,
+      text: 'Учёт расходов прямо в Telegram. Всё, что ты запишешь, видишь только ты — данные хранятся в твоём аккаунте.',
+    },
+    {
+      icon: '✍️',
+      title: 'Записывай траты',
+      text: 'Нажми «Добавить операцию», введи сумму и выбери категорию. Доходы записываются так же. Нажми на операцию, чтобы исправить её.',
+      demo: `<div class="intro-demo">${sampleOp('cafe', 'Кофе с собой', 250)}${sampleOp('salary', 'Зарплата', 48000, true)}</div>`,
+    },
+    {
+      icon: '🎯',
+      title: 'Держи бюджет',
+      text: 'Задай лимит на месяц в настройках (кнопка справа вверху) — приложение подскажет, сколько можно тратить в день.',
+      demo: `<div class="intro-demo intro-demo--pad">
+        <div class="bar"><div class="bar__fill" style="width:55%"></div></div>
+        <p class="bar__caption">Осталось ${money(20000)} из ${money(45000)} · ~${money(1430)} в день</p>
+      </div>`,
+    },
+    {
+      icon: '📊',
+      title: 'Смотри, куда уходят деньги',
+      text: 'Диаграмма по категориям обновляется сама. Нажми на категорию — и останутся только её операции.',
+      demo: `<div class="intro-demo intro-demo--pad intro-demo--chart">
+        <div class="donut">${donutHtml(sampleParts, 20450)}</div>
+        <div class="legend">${sampleParts.map((p) => `<div class="legend__row">
+          <span class="legend__dot" style="background:${p.color}"></span>
+          <span class="legend__title">${p.emoji} ${esc(p.title)}</span>
+          <span class="legend__pct">${Math.round((p.sum / 20450) * 100)}%</span>
+        </div>`).join('')}</div>
+      </div>`,
+    },
+  ];
+
+  function showIntro(index) {
+    if (index >= INTRO.length) return closeIntro();
+    const back = state.intro !== null && index < state.intro;
+    state.intro = index;
+    const s = INTRO[index];
+    $('intro').hidden = false;
+    $('introSlide').innerHTML = `
+      <div class="intro__slide${back ? ' is-back' : ''}">
+        <div class="intro__icon">${s.icon}</div>
+        <h2 class="intro__title">${esc(s.title)}</h2>
+        <p class="intro__text">${esc(s.text)}</p>
+        ${s.demo || ''}
+      </div>`;
+    $('introDots').innerHTML = INTRO.map((_, i) => `<i class="${i === index ? 'is-active' : ''}"></i>`).join('');
+    $('introSkip').hidden = index === INTRO.length - 1;
+    haptic('light');
+    updateChrome();
+  }
+
+  function closeIntro() {
+    state.intro = null;
+    $('intro').hidden = true;
+    window.scrollTo(0, 0);
+    render();
   }
 
   // ---------- Отрисовка ----------
@@ -278,7 +363,7 @@
     if (!list.length) {
       $('opsList').innerHTML = `<div class="empty-state">
         <div class="empty-state__icon">🧾</div>
-        <p>${state.ops.length ? 'Здесь пока ничего нет' : 'Добавьте первую операцию — и появится статистика'}</p>
+        <p>${state.ops.length ? 'Здесь пока ничего нет' : 'Добавьте первую трату кнопкой «Добавить операцию» — и появится статистика'}</p>
       </div>`;
       return;
     }
@@ -436,6 +521,7 @@
         ? 'Данные хранятся в облаке Telegram и доступны на всех ваших устройствах.'
         : 'В браузере данные хранятся только на этом устройстве. В Telegram — в облаке и на всех устройствах.'}</p>
       <div class="sheet__actions">
+        <button type="button" class="secondary-btn" data-sheet="intro">Как пользоваться</button>
         <button type="button" class="secondary-btn" data-sheet="demo">Заполнить примером</button>
         <button type="button" class="secondary-btn secondary-btn--danger" data-sheet="clear">Удалить все операции</button>
       </div>`;
@@ -447,6 +533,9 @@
         return saveOp();
       case 'delete':
         return deleteOp();
+      case 'intro':
+        closeSheet();
+        return showIntro(0);
       case 'budget': {
         const value = parseAmount($('budgetInput').value);
         state.settings.budget = value > 0 ? Math.round(value) : 0;
@@ -565,8 +654,28 @@
 
     $('settingsBtn').addEventListener('click', () => openSheet({ kind: 'settings' }));
     $('mainBtn').addEventListener('click', () => mainAction && mainAction());
+    $('introSkip').addEventListener('click', closeIntro);
+    $('introDots').addEventListener('click', (e) => {
+      const dot = e.target.closest('i');
+      if (dot) showIntro([...$('introDots').children].indexOf(dot));
+    });
+
+    // листание вступления свайпом
+    let touchX = null;
+    $('intro').addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+    $('intro').addEventListener('touchend', (e) => {
+      if (touchX === null) return;
+      const dx = e.changedTouches[0].clientX - touchX;
+      touchX = null;
+      if (dx < -50) showIntro(state.intro + 1);
+      else if (dx > 50 && state.intro > 0) showIntro(state.intro - 1);
+    });
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeSheet();
+      if (state.intro === null || state.sheet) return;
+      if (e.key === 'ArrowRight') showIntro(state.intro + 1);
+      if (e.key === 'ArrowLeft' && state.intro > 0) showIntro(state.intro - 1);
     });
   }
 
@@ -582,12 +691,15 @@
     bindEvents();
     render();
 
-    // подтягиваем данные из облака Telegram; при самом первом запуске — пример
+    // подтягиваем данные из облака Telegram; при самом первом запуске — вступление (или пример по ссылке ?demo)
     try {
       const [ops, settings] = await Promise.all([store.load('ops'), store.load('settings')]);
       if (settings) state.settings = settings;
-      state.ops = ops || demoOps();
-      if (!ops) saveOps();
+      state.ops = ops || (demoLink ? demoOps() : []);
+      if (!ops) {
+        saveOps();
+        if (!demoLink) showIntro(0);
+      }
     } catch (e) {
       toast('Не удалось загрузить данные из облака');
     }
